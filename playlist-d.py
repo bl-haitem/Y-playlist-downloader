@@ -3,12 +3,19 @@ import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 import sys
+import shutil  # لإيجاد ffmpeg تلقائيًا
 
 try:
     import yt_dlp
 except ImportError:
     os.system(f"{sys.executable} -m pip install yt-dlp")
     import yt_dlp
+
+# البحث عن ffmpeg في النظام
+ffmpeg_path = shutil.which("ffmpeg")
+
+if not ffmpeg_path:
+    messagebox.showwarning("FFmpeg Not Found", "FFmpeg is required but not found. Please install it manually from https://ffmpeg.org/download.html.")
 
 def download_hook(d):
     def update_gui():
@@ -51,21 +58,24 @@ def start_download():
     def download_thread():
         try:
             ydl_opts = {
-                'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
+                'outtmpl': os.path.join(output_dir, '%(playlist_title)s/%(title)s.%(ext)s'),  
                 'format': selected_format,
-                'noplaylist': False,
                 'progress_hooks': [download_hook],
-                'ffmpeg_location': os.path.join(os.getcwd(), "ffmpeg.exe"),  # استخدام ffmpeg المدمج
                 'postprocessors': [{
                     'key': 'FFmpegVideoConvertor',
-                    'preferedformat': 'mp4'  # تحويل الفيديو إلى mp4 بعد الدمج
-                }]
+                    'preferedformat': 'mp4'
+                }],
+                'yes_playlist': True  # يفرض تحميل البلايليست بالكامل
             }
+
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
+            
             messagebox.showinfo("Success", "🎉 Playlist downloaded successfully!")
+
         except Exception as e:
             messagebox.showerror("Error", f"❌ An error occurred:\n{e}")
+
         finally:
             download_button.config(state="normal")
             progress_var.set(0)
