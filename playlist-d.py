@@ -3,7 +3,7 @@ import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 import sys
-import shutil  # لإيجاد ffmpeg تلقائيًا
+import shutil
 
 try:
     import yt_dlp
@@ -13,7 +13,6 @@ except ImportError:
 
 # البحث عن ffmpeg في النظام
 ffmpeg_path = shutil.which("ffmpeg")
-
 if not ffmpeg_path:
     messagebox.showwarning("FFmpeg Not Found", "FFmpeg is required but not found. Please install it manually from https://ffmpeg.org/download.html.")
 
@@ -24,23 +23,20 @@ def download_hook(d):
             downloaded = d.get('downloaded_bytes', 0)
             percentage = (downloaded / total * 100) if total else 0
             progress_var.set(percentage)
-            status_label.config(text=f"📥 Downloading: {percentage:.1f}%")
+            status_label.config(text=f"\U0001F4E5 Downloading: {percentage:.1f}%")
         elif d['status'] == 'finished':
             progress_var.set(100)
             status_label.config(text="✅ Download Complete!")
-
     root.after(0, update_gui)
 
 def start_download():
     url = url_entry.get().strip()
     quality = quality_var.get()
-
     if not url:
         messagebox.showerror("Error", "Please enter a valid playlist URL!")
         return
 
     download_button.config(state="disabled")
-
     output_dir = "downloads"
     os.makedirs(output_dir, exist_ok=True)
 
@@ -52,30 +48,46 @@ def start_download():
         "360p": "bv*[height<=360]+ba",
         "Audio Only": "ba[ext=m4a]/ba"
     }
-
     selected_format = format_map.get(quality, "bestaudio+bv*")
 
     def download_thread():
         try:
-            ydl_opts = {
-                'outtmpl': os.path.join(output_dir, '%(playlist_title)s/%(title)s.%(ext)s'),  
-                'format': selected_format,
-                'progress_hooks': [download_hook],
-                'postprocessors': [{
-                    'key': 'FFmpegVideoConvertor',
-                    'preferedformat': 'mp4'
-                }],
-                'yes_playlist': True  # يفرض تحميل البلايليست بالكامل
-            }
+            # استخراج معلومات القائمة دون تحميل
+            ydl_opts_extract = {'quiet': True, 'ignoreerrors': True}
+            with yt_dlp.YoutubeDL(ydl_opts_extract) as ydl:
+                info = ydl.extract_info(url, download=False)
+            if info is None:
+                messagebox.showerror("Error", "Could not extract playlist information.")
+                return
+            if 'entries' in info:
+                entries = list(info['entries'])
+            else:
+                entries = [info]
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-            
+            total_videos = len(entries)
+            print(f"Total videos extracted: {total_videos}")  # للتأكد من العدد المستخرج
+            for i, entry in enumerate(entries, start=1):
+                if entry is None:
+                    continue
+                status_label.config(text=f"Downloading video {i}/{total_videos}")
+                video_url = entry.get("webpage_url")
+                if not video_url:
+                    continue
+                video_opts = {
+                    'outtmpl': os.path.join(output_dir, '%(playlist_title)s/%(playlist_index)s - %(title)s.%(ext)s'),
+                    'format': selected_format,
+                    'progress_hooks': [download_hook],
+                    'postprocessors': [{
+                        'key': 'FFmpegVideoConvertor',
+                        'preferedformat': 'mp4'
+                    }],
+                    'ignoreerrors': True,
+                }
+                with yt_dlp.YoutubeDL(video_opts) as video_ydl:
+                    video_ydl.download([video_url])
             messagebox.showinfo("Success", "🎉 Playlist downloaded successfully!")
-
         except Exception as e:
             messagebox.showerror("Error", f"❌ An error occurred:\n{e}")
-
         finally:
             download_button.config(state="normal")
             progress_var.set(0)
@@ -85,7 +97,6 @@ def start_download():
 
 root = tk.Tk()
 root.title("🎥 YouTube Playlist Downloader (With Audio)")
-
 root.geometry("500x300")
 root.minsize(400, 250)
 root.maxsize(700, 450)
